@@ -1762,6 +1762,17 @@ int main(int argc, const char **argv) {
             free(cmd);
         }
 
+        if (test_is_selected("mget")) {
+            const char *argv[11];
+            argv[0] = "MGET";
+            for (i = 1; i < 11; i += 1) {
+                argv[i] = "key:{tag}:__rand_int__";
+            }
+            len = redisFormatCommandArgv(&cmd,11,argv,NULL);
+            benchmark("MGET (10 keys)",cmd,len);
+            free(cmd);
+        }
+
         if (!config.csv) printf("\n");
     } while(config.loop);
 
