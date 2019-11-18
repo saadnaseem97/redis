@@ -1702,6 +1702,12 @@ int main(int argc, const char **argv) {
             free(cmd);
         }
 
+        if (test_is_selected("srem")) {
+            len = redisFormatCommand(&cmd, "myset:{tag} element:__rand_int__");
+            benchmark("SREM", cmd, len);
+            free(cmd);
+        }
+
         if (test_is_selected("hset")) {
             len = redisFormatCommand(&cmd,
                 "HSET myhash:{tag}:__rand_int__ element:__rand_int__ %s",data);
