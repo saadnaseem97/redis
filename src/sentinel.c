@@ -256,6 +256,9 @@ struct sentinelState {
     unsigned long simfailure_flags; /* Failures simulation. */
     int deny_scripts_reconfig; /* Allow SENTINEL SET ... to change script
                                   paths at runtime? */
+    int tilt_trigger;   /* Tilt mode trigger time in milliseconds */
+
+    int tilt_period;    /* Tilt mode time duration in milliseconds */
 } sentinel;
 
 /* A script execution job. */
@@ -504,6 +507,8 @@ void initSentinel(void) {
     sentinel.announce_port = 0;
     sentinel.simfailure_flags = SENTINEL_SIMFAILURE_NONE;
     sentinel.deny_scripts_reconfig = SENTINEL_DEFAULT_DENY_SCRIPTS_RECONFIG;
+    sentinel.tilt_trigger = SENTINEL_TILT_TRIGGER;
+    sentinel.tilt_period = SENTINEL_TILT_PERIOD;
     memset(sentinel.myid,0,sizeof(sentinel.myid));
 }
 
@@ -1756,6 +1761,12 @@ char *sentinelHandleConfiguration(char **argv, int argc) {
             return "Please specify yes or no for the "
                    "deny-scripts-reconfig options.";
         }
+    } else if (!strcasecmp(argv[0],"tilt-mode-trigger") && argc == 2) {
+
+        sentinel.tilt_trigger = atoi(argv[1]);
+    } else if (!strcasecmp(argv[0],"tilt-mode-period") && argc == 2) {
+
+        sentinel.tilt_period = atoi(argv[1]);
     } else {
         return "Unrecognized sentinel configuration statement.";
     }
@@ -1919,6 +1930,20 @@ void rewriteConfigSentinelOption(struct rewriteConfigState *state) {
     if (sentinel.announce_port) {
         line = sdscatprintf(sdsempty(),"sentinel announce-port %d",
                             sentinel.announce_port);
+        rewriteConfigRewriteLine(state,"sentinel",line,1);
+    }
+
+        /* sentinel tilt trigger. */
+    if (sentinel.tilt_trigger) {
+        line = sdscatprintf(sdsempty(),"sentinel tilt-mode-trigger %d",
+                            sentinel.tilt_trigger);
+        rewriteConfigRewriteLine(state,"sentinel",line,1);
+    }
+
+        /* sentinel tilt period. */
+    if (sentinel.tilt_period) {
+        line = sdscatprintf(sdsempty(),"sentinel tilt-mode-period %d",
+                            sentinel.tilt_period);
         rewriteConfigRewriteLine(state,"sentinel",line,1);
     }
 
@@ -4457,7 +4482,7 @@ void sentinelHandleRedisInstance(sentinelRedisInstance *ri) {
      * TILT happens when we find something odd with the time, like a
      * sudden change in the clock. */
     if (sentinel.tilt) {
-        if (mstime()-sentinel.tilt_start_time < SENTINEL_TILT_PERIOD) return;
+        if (mstime()-sentinel.tilt_start_time < sentinel.tilt_period) return;
         sentinel.tilt = 0;
         sentinelEvent(LL_WARNING,"-tilt",NULL,"#tilt mode exited");
     }
@@ -4529,7 +4554,7 @@ void sentinelCheckTiltCondition(void) {
     mstime_t now = mstime();
     mstime_t delta = now - sentinel.previous_time;
 
-    if (delta < 0 || delta > SENTINEL_TILT_TRIGGER) {
+    if (delta < 0 || delta > sentinel.tilt_trigger) {
         sentinel.tilt = 1;
         sentinel.tilt_start_time = mstime();
         sentinelEvent(LL_WARNING,"+tilt",NULL,"#tilt mode entered");
@@ -4543,6 +4568,7 @@ void sentinelTimer(void) {
     sentinelRunPendingScripts();
     sentinelCollectTerminatedScripts();
     sentinelKillTimedoutScripts();
+
 
     /* We continuously change the frequency of the Redis "timer interrupt"
      * in order to desynchronize every Sentinel from every other.
