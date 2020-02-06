@@ -1942,14 +1942,14 @@ void rewriteConfigSentinelOption(struct rewriteConfigState *state) {
     }
 
         /* sentinel tilt trigger. */
-    if (sentinel.tilt_trigger) {
+    if (sentinel.tilt_trigger != SENTINEL_TILT_TRIGGER) {
         line = sdscatprintf(sdsempty(),"sentinel tilt-mode-trigger %lld",
                             sentinel.tilt_trigger);
         rewriteConfigRewriteLine(state,"sentinel",line,1);
     }
 
         /* sentinel tilt period. */
-    if (sentinel.tilt_period) {
+    if (sentinel.tilt_period != SENTINEL_TILT_PERIOD) {
         line = sdscatprintf(sdsempty(),"sentinel tilt-mode-period %lld",
                             sentinel.tilt_period);
         rewriteConfigRewriteLine(state,"sentinel",line,1);
@@ -4602,6 +4602,7 @@ void sentinelTimer(void) {
     sentinelRunPendingScripts();
     sentinelCollectTerminatedScripts();
     sentinelKillTimedoutScripts();
+
     /* We continuously change the frequency of the Redis "timer interrupt"
      * in order to desynchronize every Sentinel from every other.
      * This non-determinism avoids that Sentinels started at the same time
