@@ -256,9 +256,9 @@ struct sentinelState {
     unsigned long simfailure_flags; /* Failures simulation. */
     int deny_scripts_reconfig; /* Allow SENTINEL SET ... to change script
                                   paths at runtime? */
-    int tilt_trigger;   /* Tilt mode trigger time in milliseconds */
+    mstime_t tilt_trigger;   /* Tilt mode trigger time in milliseconds */
 
-    int tilt_period;    /* Tilt mode time duration in milliseconds */
+    mstime_t tilt_period;    /* Tilt mode time duration in milliseconds */
 } sentinel;
 
 /* A script execution job. */
@@ -1762,11 +1762,19 @@ char *sentinelHandleConfiguration(char **argv, int argc) {
                    "deny-scripts-reconfig options.";
         }
     } else if (!strcasecmp(argv[0],"tilt-mode-trigger") && argc == 2) {
-
-        sentinel.tilt_trigger = atoi(argv[1]);
+        /* tilt-mode-trigger <trigger-time> */
+        long long ll = atoll(argv[1]);
+        if (ll <= 0) {
+            return "Wrong type of config in tilt-mode-trigger, value must be integer larger than 0";
+        }
+        sentinel.tilt_trigger = ll;
     } else if (!strcasecmp(argv[0],"tilt-mode-period") && argc == 2) {
-
-        sentinel.tilt_period = atoi(argv[1]);
+        /* tilt-mode-period <period-time> */
+        long long ll = atoll(argv[1]);
+        if (ll <= 0) {
+            return "Wrong type of config in tilt-mode-period, value must be integer larger than 0";
+        }
+        sentinel.tilt_period = ll;
     } else {
         return "Unrecognized sentinel configuration statement.";
     }
@@ -1935,14 +1943,14 @@ void rewriteConfigSentinelOption(struct rewriteConfigState *state) {
 
         /* sentinel tilt trigger. */
     if (sentinel.tilt_trigger) {
-        line = sdscatprintf(sdsempty(),"sentinel tilt-mode-trigger %d",
+        line = sdscatprintf(sdsempty(),"sentinel tilt-mode-trigger %lld",
                             sentinel.tilt_trigger);
         rewriteConfigRewriteLine(state,"sentinel",line,1);
     }
 
         /* sentinel tilt period. */
     if (sentinel.tilt_period) {
-        line = sdscatprintf(sdsempty(),"sentinel tilt-mode-period %d",
+        line = sdscatprintf(sdsempty(),"sentinel tilt-mode-period %lld",
                             sentinel.tilt_period);
         rewriteConfigRewriteLine(state,"sentinel",line,1);
     }
@@ -3351,6 +3359,32 @@ void sentinelCommand(client *c) {
             }
         }
         addReply(c,shared.ok);
+    } else if (!strcasecmp(c->argv[1]->ptr,"tilt-mode-trigger")) {
+        if (c->argc != 3) goto numargserr;
+        robj *o = c->argv[2];
+        long long ll;
+        if (getLongLongFromObject(o,&ll) == C_ERR || ll <= 0) {
+            addReplyErrorFormat(c,"Invalid argument for sentinel tilt-mode-trigger '%s'",
+                               (char*)c->argv[2]->ptr);
+            return;
+        }
+        sentinel.tilt_trigger = ll;
+        sentinelFlushConfig();
+        addReply(c,shared.ok);
+        return;
+    } else if (!strcasecmp(c->argv[1]->ptr,"tilt-mode-period")) {
+        if (c->argc != 3) goto numargserr;
+        robj *o = c->argv[2];
+        long long ll;
+        if (getLongLongFromObject(o,&ll) == C_ERR || ll <= 0) {
+            addReplyErrorFormat(c,"Invalid argument for sentinel tilt-mode-period '%s'",
+                               (char*)c->argv[2]->ptr);
+            return;
+        }
+        sentinel.tilt_period = ll;
+        sentinelFlushConfig();
+        addReply(c,shared.ok);
+        return;
     } else {
         addReplyErrorFormat(c,"Unknown sentinel subcommand '%s'",
                                (char*)c->argv[1]->ptr);
@@ -4568,8 +4602,6 @@ void sentinelTimer(void) {
     sentinelRunPendingScripts();
     sentinelCollectTerminatedScripts();
     sentinelKillTimedoutScripts();
-
-
     /* We continuously change the frequency of the Redis "timer interrupt"
      * in order to desynchronize every Sentinel from every other.
      * This non-determinism avoids that Sentinels started at the same time
