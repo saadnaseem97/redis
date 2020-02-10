@@ -4591,7 +4591,7 @@ void sentinelCheckTiltCondition(void) {
     if (delta < 0 || delta > sentinel.tilt_trigger) {
         sentinel.tilt = 1;
         sentinel.tilt_start_time = mstime();
-        sentinelEvent(LL_WARNING,"+tilt",NULL,"#tilt mode entered");
+        sentinelEvent(LL_WARNING,"+tilt",NULL,"#tilt mode entered with delta time: %lld ms",delta);
     }
     sentinel.previous_time = mstime();
 }
