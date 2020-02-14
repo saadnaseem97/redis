@@ -4496,18 +4496,14 @@ void infoCommand(client *c) {
         if (lastValid) {
             info = sdscat(info,"\r\n");
         }
-
         sds sectionInfo = genRedisInfoString(c->argv[i]->ptr);
         info = sdscatlen(info,sectionInfo,sdslen(sectionInfo));
         lastValid = sdslen(sectionInfo) > 0 ? 1 : 0;
-        sdsfree(sectionInfo);
-
-        
+        sdsfree(sectionInfo); 
     }
 
     addReplyVerbatim(c,info,sdslen(info),"txt");
     sdsfree(info);
-
     return;
 }
 
