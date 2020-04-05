@@ -373,9 +373,11 @@ void incrDecrCommand(client *c, long long incr) {
             dbAdd(c->db,c->argv[1],new);
         }
     }
-    signalModifiedKey(c->db,c->argv[1]);
     notifyKeyspaceEvent(NOTIFY_STRING,"incrby",c->argv[1],c->db->id);
-    server.dirty++;
+    if (o == NULL || incr != 0 ) {
+        signalModifiedKey(c->db,c->argv[1]);
+        server.dirty++;
+    }
     addReply(c,shared.colon);
     addReply(c,new);
     addReply(c,shared.crlf);
