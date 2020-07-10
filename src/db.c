@@ -205,6 +205,8 @@ int dbAddRDBLoad(redisDb *db, sds key, robj *val) {
     int retval = dictAdd(db->dict, key, val);
     if (retval != DICT_OK) return 0;
     if (server.cluster_enabled) slotToKeyAdd(key);
+    notifyKeyspaceEvent(NOTIFY_KEYSPACE_CHANGE,
+                "add",createObject(OBJ_STRING,sdsdup(key)),db->id);
     return 1;
 }
 
@@ -308,9 +310,16 @@ robj *dbRandomKey(redisDb *db) {
 int dbSyncDelete(redisDb *db, robj *key) {
     /* Deleting an entry from the expires dict will not free the sds of
      * the key, because it is shared with the main dictionary. */
-    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
+    if (dictSize(db->expires) > 0) {
+        if (dictDelete(db->expires,key->ptr)) {
+            notifyKeyspaceEvent(NOTIFY_KEYSPACE_CHANGE,
+                "expire_remove",key,db->id);
+        }
+    }
     if (dictDelete(db->dict,key->ptr) == DICT_OK) {
         if (server.cluster_enabled) slotToKeyDel(key->ptr);
+        notifyKeyspaceEvent(NOTIFY_KEYSPACE_CHANGE,
+                "remove",key,db->id);
         return 1;
     } else {
         return 0;
@@ -1178,7 +1187,12 @@ int removeExpire(redisDb *db, robj *key) {
     /* An expire may only be removed if there is a corresponding entry in the
      * main dict. Otherwise, the key will never be freed. */
     serverAssertWithInfo(NULL,key,dictFind(db->dict,key->ptr) != NULL);
-    return dictDelete(db->expires,key->ptr) == DICT_OK;
+    if (dictDelete(db->expires,key->ptr) == DICT_OK) {
+        notifyKeyspaceEvent(NOTIFY_KEYSPACE_CHANGE,
+                "expire_remove",key,db->id);
+        return 1;
+    }
+    return 0;
 }
 
 /* Set an expire to the specified key. If the expire is set in the context
@@ -1191,7 +1205,14 @@ void setExpire(client *c, redisDb *db, robj *key, long long when) {
     /* Reuse the sds from the main dict in the expire dict */
     kde = dictFind(db->dict,key->ptr);
     serverAssertWithInfo(NULL,key,kde != NULL);
+    
+    if (dictFind(db->expires,dictGetKey(kde)) == NULL) {
+        notifyKeyspaceEvent(NOTIFY_KEYSPACE_CHANGE,
+                "expire_add",key,db->id);
+    }
+
     de = dictAddOrFind(db->expires,dictGetKey(kde));
+
     dictSetSignedIntegerVal(de,when);
 
     int writable_slave = server.masterhost && server.repl_slave_ro == 0;

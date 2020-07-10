@@ -54,7 +54,12 @@ size_t lazyfreeGetFreeEffort(robj *obj) {
 int dbAsyncDelete(redisDb *db, robj *key) {
     /* Deleting an entry from the expires dict will not free the sds of
      * the key, because it is shared with the main dictionary. */
-    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
+    if (dictSize(db->expires) > 0) {
+        if (dictDelete(db->expires,key->ptr)) {
+            notifyKeyspaceEvent(NOTIFY_KEYSPACE_CHANGE,
+                "expire_remove",key,db->id);
+        }
+    }
 
     /* If the value is composed of a few allocations, to free in a lazy way
      * is actually just slower... So under a certain limit we just free
@@ -84,6 +89,8 @@ int dbAsyncDelete(redisDb *db, robj *key) {
     if (de) {
         dictFreeUnlinkedEntry(db->dict,de);
         if (server.cluster_enabled) slotToKeyDel(key->ptr);
+        notifyKeyspaceEvent(NOTIFY_KEYSPACE_CHANGE,
+                "remove",key,db->id);
         return 1;
     } else {
         return 0;
