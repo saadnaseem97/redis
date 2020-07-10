@@ -186,6 +186,8 @@ void dbAdd(redisDb *db, robj *key, robj *val) {
         val->type == OBJ_STREAM)
         signalKeyAsReady(db, key);
     if (server.cluster_enabled) slotToKeyAdd(key->ptr);
+    notifyKeyspaceEvent(NOTIFY_KEYSPACE_CHANGE,
+                "add",key,db->id);
 }
 
 /* This is a special version of dbAdd() that is used only when loading

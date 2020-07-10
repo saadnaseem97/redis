@@ -56,6 +56,7 @@ int keyspaceEventsStringToFlags(char *classes) {
         case 'E': flags |= NOTIFY_KEYEVENT; break;
         case 't': flags |= NOTIFY_STREAM; break;
         case 'm': flags |= NOTIFY_KEY_MISS; break;
+        case 'c': flags |= NOTIFY_KEYSPACE_CHANGE; break;
         default: return -1;
         }
     }
@@ -86,6 +87,7 @@ sds keyspaceEventsFlagsToString(int flags) {
     if (flags & NOTIFY_KEYSPACE) res = sdscatlen(res,"K",1);
     if (flags & NOTIFY_KEYEVENT) res = sdscatlen(res,"E",1);
     if (flags & NOTIFY_KEY_MISS) res = sdscatlen(res,"m",1);
+    if (flags & NOTIFY_KEYSPACE_CHANGE) res = sdscatlen(res,"c",1);
     return res;
 }
 

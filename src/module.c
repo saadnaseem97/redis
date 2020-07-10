@@ -4846,6 +4846,7 @@ void moduleReleaseGIL(void) {
  *  - REDISMODULE_NOTIFY_EVICTED: Eviction events
  *  - REDISMODULE_NOTIFY_STREAM: Stream events
  *  - REDISMODULE_NOTIFY_KEYMISS: Key-miss events
+ *  - REDISMODULE_NOTIFY_KEYSPACE_CHANGE: Keyspace change events
  *  - REDISMODULE_NOTIFY_ALL: All events (Excluding REDISMODULE_NOTIFY_KEYMISS)
  *
  * We do not distinguish between key events and keyspace events, and it is up
