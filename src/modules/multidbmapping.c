@@ -1,3 +1,4 @@
+/*TODO: command mapping, flushhdb, ocking on updating metadata */
 #define REDISMODULE_EXPERIMENTAL_API
 
 #include "../redismodule.h"
@@ -28,10 +29,14 @@ int DictSetMetrics(long dbnum, const char *metric, void *ptr) {
     RedisModuleString *key = RedisModule_CreateStringFromLongLong(NULL, (long long)dbnum);
     RedisModule_StringAppendBuffer(NULL, key, ":", 1);
     RedisModule_StringAppendBuffer(NULL, key, metric, strlen(metric));
-    if (RedisModule_DictSet(VirtualKeyspaceMetadata,key,ptr) == REDISMODULE_ERR)
-        return REDISMODULE_ERR;
-    
-    return REDISMODULE_OK;
+    int returnval;
+    if (RedisModule_DictSet(VirtualKeyspaceMetadata,key,ptr) == REDISMODULE_ERR) {
+        returnval = REDISMODULE_ERR;
+    }else {
+        returnval = REDISMODULE_OK;
+    }
+    RedisModule_FreeString(NULL,key);
+    return returnval;
 
 }
 
@@ -39,12 +44,12 @@ void *DictGetMetrics(long dbnum, const char *metric) {
     RedisModuleString *key = RedisModule_CreateStringFromLongLong(NULL, (long long)dbnum);
     RedisModule_StringAppendBuffer(NULL, key, ":", 1);
     RedisModule_StringAppendBuffer(NULL, key, metric, strlen(metric));
-    return RedisModule_DictGet(VirtualKeyspaceMetadata,key,NULL);
-
+    void *returnval = RedisModule_DictGet(VirtualKeyspaceMetadata,key,NULL);
+    RedisModule_FreeString(NULL,key);
+    return returnval;
 }
 
 double GetDBNumOnKey(const char *key) {
-
     return strtoll(key, NULL,0);
 
 }
@@ -61,20 +66,20 @@ int MultidbMappingSet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv
 
     RedisModuleCallReply *reply;
     reply = RedisModule_Call(ctx,"SET","sv",s,argv+3,argc-3);
+
     if (reply) {
         RedisModule_ReplyWithCallReply(ctx, reply);
         RedisModule_FreeCallReply(reply);
     } else {
         RedisModule_ReplyWithError(ctx, strerror(errno));
     }
+    RedisModule_FreeString(ctx,s);
     return REDISMODULE_OK;
     
 }
 
 int MultidbMappingGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
     if (argc != 3) return RedisModule_WrongArity(ctx);
-
     RedisModuleString *s = RedisModule_CreateString(ctx, "", 0);
     const char *dbnum = RedisModule_StringPtrLen(argv[1], NULL);
     size_t keylen;
@@ -89,14 +94,12 @@ int MultidbMappingGet_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv
         RedisModule_ReplyWithCallReply(ctx, reply);
         RedisModule_FreeCallReply(reply);
     }
-    
-    
+    RedisModule_FreeString(ctx,s);
     return REDISMODULE_OK;
     
 }
 
 int MultidbMappingInfoDB_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
     REDISMODULE_NOT_USED(ctx);
     REDISMODULE_NOT_USED(argv);
     REDISMODULE_NOT_USED(argc);
@@ -154,7 +157,6 @@ int KeyspaceChangeCallback(RedisModuleCtx *ctx, int type, const char *event,
 
 
 int InitVirtualKeyspaceMetadata(long long dbnum){
-
     if (dbnum < 1) {
         dbnum = 1;
     }
@@ -186,8 +188,6 @@ int InitVirtualKeyspaceMetadata(long long dbnum){
 }
 
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
-
-
     if (RedisModule_Init(ctx,"multidbmapping",1,REDISMODULE_APIVER_1)
         == REDISMODULE_ERR) return REDISMODULE_ERR;
 
