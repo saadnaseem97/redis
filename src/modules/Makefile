@@ -18,6 +18,11 @@ all: helloworld.so hellotype.so helloblock.so testmodule.so hellocluster.so hell
 .c.xo:
 	$(CC) -I. $(CFLAGS) $(SHOBJ_CFLAGS) -fPIC -c $< -o $@
 
+multidbmapping.xo: ../redismodule.h
+
+multidbmapping.so: multidbmapping.xo
+	$(LD) -o $@ $< $(SHOBJ_LDFLAGS) $(LIBS) -lc
+
 helloworld.xo: ../redismodule.h
 
 helloworld.so: helloworld.xo
