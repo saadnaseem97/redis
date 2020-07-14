@@ -55,7 +55,7 @@ int dbAsyncDelete(redisDb *db, robj *key) {
     /* Deleting an entry from the expires dict will not free the sds of
      * the key, because it is shared with the main dictionary. */
     if (dictSize(db->expires) > 0) {
-        if (dictDelete(db->expires,key->ptr)) {
+        if (dictDelete(db->expires,key->ptr) == DICT_OK) {
             notifyKeyspaceEvent(NOTIFY_KEYSPACE_CHANGE,
                 "expire_remove",key,db->id);
         }
