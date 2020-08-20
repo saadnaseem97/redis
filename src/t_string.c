@@ -485,10 +485,14 @@ void strlenCommand(client *c) {
  *
  * STRALGO <algorithm> ... arguments ... */
 void stralgoLCS(client *c);     /* This implements the LCS algorithm. */
+void stralgoLDIST(client *c);  
+
 void stralgoCommand(client *c) {
     /* Select the algorithm. */
     if (!strcasecmp(c->argv[1]->ptr,"lcs")) {
         stralgoLCS(c);
+    } else if (!strcasecmp(c->argv[1]->ptr,"ldist")) {
+        stralgoLDIST(c);
     } else {
         addReply(c,shared.syntaxerr);
     }
@@ -707,5 +711,161 @@ cleanup:
     if (obja) decrRefCount(obja);
     if (objb) decrRefCount(objb);
     return;
+}
+
+/* STRALGO LDIST [GETOPS] STRINGS <string> <string> 
+ * | KEYS <keya> <keyb>
+ */
+void stralgoLDIST(client *c) {
+    uint32_t i, j;
+    sds a = NULL, b = NULL;
+    int getops = 0;
+    robj *obja = NULL, *objb = NULL;
+
+    for (j = 2; j < (uint32_t)c->argc; j++) {
+        char *opt = c->argv[j]->ptr;
+        int moreargs = (c->argc-1) - j;
+
+        if (!strcasecmp(opt,"GETOPS")) {
+            getops = 1;
+        } else if (!strcasecmp(opt,"STRINGS") && moreargs > 1) {
+            if (a != NULL) {
+                addReplyError(c,"Either use STRINGS or KEYS");
+                goto cleanup;
+            }
+            a = c->argv[j+1]->ptr;
+            b = c->argv[j+2]->ptr;
+            j += 2;
+        } else if (!strcasecmp(opt,"KEYS") && moreargs > 1) {
+            if (a != NULL) {
+                addReplyError(c,"Either use STRINGS or KEYS");
+                goto cleanup;
+            }
+            obja = lookupKeyRead(c->db,c->argv[j+1]);
+            objb = lookupKeyRead(c->db,c->argv[j+2]);
+            if ((obja && obja->type != OBJ_STRING) ||
+                (objb && objb->type != OBJ_STRING))
+            {
+                addReplyError(c,
+                    "The specified keys must contain string values");
+                /* Don't cleanup the objects, we need to do that
+                 * only after callign getDecodedObject(). */
+                obja = NULL;
+                objb = NULL;
+                goto cleanup;
+            }
+            obja = obja ? getDecodedObject(obja) : createStringObject("",0);
+            objb = objb ? getDecodedObject(objb) : createStringObject("",0);
+            a = obja->ptr;
+            b = objb->ptr;
+            j += 2;
+        } else {
+            addReply(c,shared.syntaxerr);
+            goto cleanup;
+        }
+    }
+
+    /* Complain if the user passed ambiguous parameters. */
+    if (a == NULL) {
+        addReplyError(c,"Please specify two strings: "
+                        "STRINGS or KEYS options are mandatory");
+        goto cleanup;
+    } 
+
+    uint32_t alen = sdslen(a);
+    uint32_t blen = sdslen(b);
+
+    uint32_t *ldist = zmalloc((alen+1)*(blen+1)*sizeof(uint32_t));
+    #define LDIST(A,B) ldist[(B)+((A)*(blen+1))]
+    #define THREEMIN(A,B,C) (((A)<(B))?(((A)<(C))?(A):(C)):(B))
+
+    for (uint32_t i = 0; i <= alen; i++) {
+        for (uint32_t j = 0; j <= blen; j++) {
+            if (i == 0 || j == 0) {
+                LDIST(i,j) = i == 0 ? j : i;
+            } else if (a[i-1] == b[j-1]) {
+                LDIST(i,j) = LDIST(i-1,j-1);
+            } else {
+                LDIST(i,j) = THREEMIN(LDIST(i-1,j-1), LDIST(i,j-1), LDIST(i-1,j))+1;
+            }
+
+        }
+    }
+
+    void *arraylenptr = NULL;
+
+    if (getops) {
+        addReplyMapLen(c,2);
+        addReplyBulkCString(c,"operations");
+        arraylenptr = addReplyDeferredLen(c);
+    }
+
+    i = alen, j = blen;
+
+    uint32_t arraylen = 0;  
+    while (getops && i > 0 && j > 0) {
+
+        if (a[i-1] == b[j-1]) {
+
+            i--;
+            j--;
+
+        } else {
+
+            addReplyMapLen(c,3);
+            addReplyBulkCString(c,"index");
+            addReplyLongLong(c,i-1);
+
+            if (LDIST(i,j) == LDIST(i-1,j-1)+1) {
+
+                addReplyBulkCString(c,"operation");
+                addReplyBulkCString(c,"substitute");
+                addReplyBulkCString(c,"change");
+                addReplyBulkSds(c,sdscatfmt(sdsempty(),"%c",b[j-1]));
+                i--;
+                j--;
+
+            } else if (LDIST(i,j) == LDIST(i,j-1)+1) {
+
+                addReplyBulkCString(c,"operation");
+                addReplyBulkCString(c,"insert");
+                addReplyBulkCString(c,"change");
+                addReplyBulkSds(c,sdscatfmt(sdsempty(),"%c",b[j-1]));
+                j--;
+
+            } else {
+
+                addReplyBulkCString(c,"operation");
+                addReplyBulkCString(c,"delete");  
+                addReplyBulkCString(c,"change");
+                addReplyBulkCString(c,"");
+                i--;
+
+            }
+            arraylen++;
+
+
+        }
+
+    }
+
+    /* Reply depending on the given options. */
+    
+    if (arraylenptr) {
+        addReplyBulkCString(c,"distance");
+        addReplyLongLong(c,LDIST(alen,blen));
+        setDeferredArrayLen(c,arraylenptr,arraylen);
+    } else {
+        addReplyLongLong(c,LDIST(alen,blen));
+    }
+    
+    /* Cleanup. */
+    zfree(ldist);
+
+cleanup:
+    if (obja) decrRefCount(obja);
+    if (objb) decrRefCount(objb);
+    return;
+
 }
 
