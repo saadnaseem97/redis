@@ -873,6 +873,39 @@ void sdsfreesplitres(sds *tokens, int count) {
     s_free(tokens);
 }
 
+sds *sdsSplitOne(char *s, ssize_t len, const char chr,int *count) {
+    sds *tokens;
+    tokens = s_malloc(sizeof(sds)*2);
+    if (tokens == NULL) {
+        return NULL;
+    }
+    if (len == 0) {
+        *count = 0;
+        return tokens;
+    }
+    *count = 1;
+    ssize_t sp = 0;
+    while(sp <= len-1 && *(s+sp) != chr) sp++;
+    if (sp == 0) goto cleanup;
+    tokens[0] = sdsnewlen(s,sp);
+    if (tokens[0] == NULL) goto cleanup;
+    if (sp < len-1) {
+        tokens[1] = sdsnewlen(s+sp+1,len-1-sp);
+        if (tokens[1] == NULL) goto cleanup;
+        *count = 2;
+    }
+    return tokens;
+
+cleanup:
+    {
+        int i;
+        for (i = 0; i < 2; i++) sdsfree(tokens[i]);
+        s_free(tokens);
+        *count = 0;
+        return NULL;
+    }
+}
+
 /* Append to the sds string "s" an escaped string representation where
  * all the non-printable characters (tested with isprint()) are turned into
  * escapes in the form "\n\r\a...." or "\x<hex-number>".

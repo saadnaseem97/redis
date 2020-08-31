@@ -163,6 +163,7 @@ client *createClient(connection *conn) {
     c->auth_callback = NULL;
     c->auth_callback_privdata = NULL;
     c->auth_module = NULL;
+    c->user_name = NULL;
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
     if (conn) linkClient(c);
@@ -1248,6 +1249,7 @@ void freeClient(client *c) {
     zfree(c->argv);
     freeClientMultiState(c);
     sdsfree(c->peerid);
+    zfree(c->user_name);
     zfree(c);
 }
 

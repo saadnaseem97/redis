@@ -1958,6 +1958,54 @@ void authCommand(client *c) {
         return;
     }
 
+    //we need to auth in another way in enable_write_protection mode 
+    if (c->argc == 2 && server.enable_write_protection) {
+
+        
+        sds *uparr;
+        int totargs;
+        uparr = sdsSplitOne(c->argv[1]->ptr,strlen(c->argv[1]->ptr),':',&totargs);
+        if (!uparr) {
+            addReplyError(c,"Cannot allocate user pass memory!");
+            return;
+        }
+
+        if (totargs < 2) {
+            sdsfreesplitres(uparr,totargs);
+            addReplyError(c,"Invalid format of the call in enable_write_protection mode, "
+                            "the call format is AUTH <user>:<password>!");
+            return;
+        }
+
+        sds uname = uparr[0];
+        sds pass = uparr[1];
+        aclSimpleUser *user = raxFind(server.acl_simple_user,(unsigned char*)uname,sdslen(uname));
+
+        if (user == raxNotFound) {
+            sdsfreesplitres(uparr,totargs);
+            addReplyError(c,"Error: in enable_write_protection mode, User Name not found in "
+                            "configured read user or write user!");
+            return;
+        }
+        
+        sds desiredPass = user->password;
+        if (sdscmp(pass,desiredPass)) {
+            sdsfreesplitres(uparr,totargs);
+            addReplyError(c,"-WRONGPASS invalid username-password pair");
+            return;
+        }    
+
+        zfree(c->user_name);
+        c->user_name = (char *)zstrdup(uname);   
+        
+        sdsfreesplitres(uparr,totargs);
+        addReply(c,shared.ok);
+        
+        return;
+
+        
+    }
+
     /* Handle the two different forms here. The form with two arguments
      * will just use "default" as username. */
     robj *username, *password;

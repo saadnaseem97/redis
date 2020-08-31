@@ -866,6 +866,7 @@ typedef struct client {
     /* Response buffer */
     int bufpos;
     char buf[PROTO_REPLY_CHUNK_BYTES];
+    char *user_name;
 } client;
 
 struct saveparam {
@@ -884,7 +885,7 @@ struct sharedObjectsStruct {
     *colon, *queued, *null[4], *nullarray[4], *emptymap[4], *emptyset[4],
     *emptyarray, *wrongtypeerr, *nokeyerr, *syntaxerr, *sameobjecterr,
     *outofrangeerr, *noscripterr, *loadingerr, *slowscripterr, *bgsaveerr,
-    *masterdownerr, *roslaveerr, *execaborterr, *noautherr, *noreplicaserr,
+    *masterdownerr, *roslaveerr, *nowritepermerr, *execaborterr, *noautherr, *noreplicaserr,
     *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk,
     *unsubscribebulk, *psubscribebulk, *punsubscribebulk, *del, *unlink,
     *rpop, *lpop, *lpush, *rpoplpush, *zpopmin, *zpopmax, *emptyscan,
@@ -1469,7 +1470,16 @@ struct redisServer {
     char *bio_cpulist; /* cpu affinity list of bio thread. */
     char *aof_rewrite_cpulist; /* cpu affinity list of aof rewrite process. */
     char *bgsave_cpulist; /* cpu affinity list of bgsave process. */
+
+    int enable_write_protection;
+    rax *acl_simple_user; /* user table */
 };
+
+typedef struct aclSimpleUser {
+    int isWriteType;
+    sds userName;
+    sds password;
+} aclSimpleUser;
 
 typedef struct pubsubPattern {
     client *client;

@@ -1026,6 +1026,13 @@ struct redisCommand redisCommandTable[] = {
 
 /*============================ Utility functions ============================ */
 
+void freeAclSimpleUser(void *p) {
+    aclSimpleUser *user = p;
+    sdsfree(user->userName);
+    sdsfree(user->password);
+    zfree(user);
+}
+
 /* We use a private localtime implementation which is fork-safe. The logging
  * function of Redis may be called from other threads. */
 void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst);
@@ -2282,6 +2289,8 @@ void createSharedObjects(void) {
         "-MISCONF Redis is configured to save RDB snapshots, but it is currently not able to persist on disk. Commands that may modify the data set are disabled, because this instance is configured to report errors during writes if RDB snapshotting fails (stop-writes-on-bgsave-error option). Please check the Redis logs for details about the RDB error.\r\n"));
     shared.roslaveerr = createObject(OBJ_STRING,sdsnew(
         "-READONLY You can't write against a read only replica.\r\n"));
+    shared.nowritepermerr = createObject(OBJ_STRING,sdsnew(
+        "-NOWRITEPERM You are not authenticated with an user with write permission.\r\n"));
     shared.noautherr = createObject(OBJ_STRING,sdsnew(
         "-NOAUTH Authentication required.\r\n"));
     shared.oomerr = createObject(OBJ_STRING,sdsnew(
@@ -2485,6 +2494,9 @@ void initServerConfig(void) {
      * script to the slave / AOF. This is the new way starting from
      * Redis 5. However it is possible to revert it via redis.conf. */
     server.lua_always_replicate_commands = 1;
+
+    server.enable_write_protection = 0;
+    server.acl_simple_user = raxNew();
 
     initConfigValues();
 }
@@ -3720,6 +3732,25 @@ int processCommand(client *c) {
     {
         rejectCommand(c, shared.roslaveerr);
         return C_OK;
+    }
+
+    /* Don't accept write commands if we enabled write protection, 
+     also user client authenticated is not in write_user_list. */
+    if (server.enable_write_protection && is_write_command)
+    {
+        
+        char *user_name = c->user_name;
+        if (user_name == NULL) {
+            rejectCommand(c, shared.nowritepermerr);
+            return C_OK;
+        }
+
+        aclSimpleUser *user = raxFind(server.acl_simple_user,(unsigned char*)user_name,strlen(user_name));
+        if (user == raxNotFound || !user->isWriteType) {
+    
+            rejectCommand(c, shared.nowritepermerr);
+            return C_OK;
+        }
     }
 
     /* Only allow a subset of commands in the context of Pub/Sub if the

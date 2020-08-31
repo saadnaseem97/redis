@@ -568,6 +568,35 @@ void loadServerConfigFromString(char *config) {
                 err = sentinelHandleConfiguration(argv+1,argc-1);
                 if (err) goto loaderr;
             }
+        } else if (!strcasecmp(argv[0],"enable_write_protection") && argc == 2) {
+            if ((server.enable_write_protection = yesnotoi(argv[1])) == -1) {
+                err = "argument must be 'yes' or 'no'"; goto loaderr;
+            }
+        } else if (!strcasecmp(argv[0],"suser") && argc == 4) {
+            int writeType = 0;
+            if (!strcasecmp(argv[1],"write")) {
+                writeType = 1;
+            } else if (strcasecmp(argv[1],"read")) {
+                err = "suser argument must be 'write' or 'read'"; 
+                goto loaderr;
+            }
+    
+
+            if (raxFind(server.acl_simple_user,(unsigned char*)argv[2],sdslen(argv[2])) != raxNotFound) {
+                err = "suser has already defined'"; 
+                goto loaderr;
+            }
+            aclSimpleUser *user = zmalloc(sizeof(aclSimpleUser));
+            if (!user) {
+                err = "cannot allocate simple user memory"; 
+                goto loaderr;
+            }
+            printf("qqqqqqqqqq user%s,type %d",argv[2],writeType);
+            user->isWriteType = writeType;
+            user->userName = sdsdup(argv[2]);
+            user->password = sdsdup(argv[3]);
+            raxInsert(server.acl_simple_user,(unsigned char*)argv[2],sdslen(argv[2]),user,NULL);
+
         } else {
             err = "Bad directive or wrong number of arguments"; goto loaderr;
         }
@@ -810,6 +839,9 @@ void configSetCommand(client *c) {
             enableWatchdog(ll);
         else
             disableWatchdog();
+    /* enable-write-protection setting*/
+    } config_set_bool_field("enable-write-protection",server.enable_write_protection) {
+
     /* Memory fields.
      * config_set_memory_field(name,var) */
     } config_set_memory_field(
