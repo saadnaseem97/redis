@@ -876,19 +876,19 @@ void sdsfreesplitres(sds *tokens, int count) {
 sds *sdsSplitOne(char *s, ssize_t len, const char chr,int *count) {
     sds *tokens;
     tokens = s_malloc(sizeof(sds)*2);
+    *count = 0;
     if (tokens == NULL) {
         return NULL;
     }
     if (len == 0) {
-        *count = 0;
         return tokens;
     }
-    *count = 1;
     ssize_t sp = 0;
     while(sp <= len-1 && *(s+sp) != chr) sp++;
     if (sp == 0) goto cleanup;
     tokens[0] = sdsnewlen(s,sp);
     if (tokens[0] == NULL) goto cleanup;
+    *count = 1;
     if (sp < len-1) {
         tokens[1] = sdsnewlen(s+sp+1,len-1-sp);
         if (tokens[1] == NULL) goto cleanup;
@@ -899,7 +899,9 @@ sds *sdsSplitOne(char *s, ssize_t len, const char chr,int *count) {
 cleanup:
     {
         int i;
-        for (i = 0; i < 2; i++) sdsfree(tokens[i]);
+        for (i = 0; i < *count; i++) {
+            sdsfree(tokens[i]);
+        }
         s_free(tokens);
         *count = 0;
         return NULL;

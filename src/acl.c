@@ -1966,7 +1966,8 @@ void authCommand(client *c) {
         int totargs;
         uparr = sdsSplitOne(c->argv[1]->ptr,strlen(c->argv[1]->ptr),':',&totargs);
         if (!uparr) {
-            addReplyError(c,"Cannot allocate user pass memory!");
+            addReplyError(c,"Cannot allocate user pass memory or Invalid format,"
+                        "the call format is AUTH <user>:<password>!");
             return;
         }
 
