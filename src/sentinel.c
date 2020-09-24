@@ -3427,11 +3427,13 @@ void sentinelInfoCommand(client *c) {
         if (sections++) info = sdscat(info,"\r\n");
         info = sdscatprintf(info,
             "# Sentinel\r\n"
+            "sentinel_id:%s\r\n"
             "sentinel_masters:%lu\r\n"
             "sentinel_tilt:%d\r\n"
             "sentinel_running_scripts:%d\r\n"
             "sentinel_scripts_queue_length:%ld\r\n"
             "sentinel_simulate_failure_flags:%lu\r\n",
+            sentinel.myid,
             dictSize(sentinel.masters),
             sentinel.tilt,
             sentinel.running_scripts,
