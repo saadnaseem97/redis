@@ -1720,6 +1720,19 @@ int raxPrev(raxIterator *it) {
     return 1;
 }
 
+
+int raxPrevStep(raxIterator *it) {
+    if (!raxIteratorPrevStep(it,0)) {
+        errno = ENOMEM;
+        return 0;
+    }
+    if (it->flags & RAX_ITER_EOF) {
+        errno = 0;
+        return 0;
+    }
+    return 1;
+}
+
 /* Perform a random walk starting in the current position of the iterator.
  * Return 0 if the tree is empty or on out of memory. Otherwise 1 is returned
  * and the iterator is set to the node reached after doing a random walk

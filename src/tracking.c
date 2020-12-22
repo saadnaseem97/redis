@@ -265,17 +265,17 @@ void sendTrackingMessage(client *c, char *keyname, size_t keylen, int proto) {
 void trackingRememberKeyToBroadcast(client *c, char *keyname, size_t keylen) {
     raxIterator ri;
     raxStart(&ri,PrefixTable);
-    raxSeek(&ri,"^",NULL,0);
-    while(raxNext(&ri)) {
-        if (ri.key_len > keylen) continue;
-        if (ri.key_len != 0 && memcmp(ri.key,keyname,ri.key_len) != 0)
-            continue;
-        bcastState *bs = ri.data;
-        /* We insert the client pointer as associated value in the radix
-         * tree. This way we know who was the client that did the last
-         * change to the key, and can avoid sending the notification in the
-         * case the client is in NOLOOP mode. */
-        raxTryInsert(bs->keys,(unsigned char*)keyname,keylen,c,NULL);
+    raxSeek(&ri,"=",(unsigned char*)keyname,keylen);
+    for (size_t j = 0; j < ri.stack.items; j++) {
+        raxNode *prefix = ri.stack.stack[j];
+        if (prefix->iskey) {
+            bcastState *bs = prefix->data;
+            /* We insert the client pointer as associated value in the radix
+             * tree. This way we know who was the client that did the last
+             * change to the key, and can avoid sending the notification in the
+             * case the client is in NOLOOP mode. */
+            raxTryInsert(bs->keys,(unsigned char*)keyname,keylen,c,NULL);
+        }
     }
     raxStop(&ri);
 }
