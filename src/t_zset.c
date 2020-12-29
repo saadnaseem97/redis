@@ -3694,3 +3694,8 @@ void bzpopminCommand(client *c) {
 void bzpopmaxCommand(client *c) {
     blockingGenericZpopCommand(c,ZSET_MAX);
 }
+
+// ZRANDMEMBER key [count] [min max]
+void zrandmemberCommand(client *c) {
+
+}

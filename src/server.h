@@ -2480,6 +2480,7 @@ void zremrangebyscoreCommand(client *c);
 void zremrangebylexCommand(client *c);
 void zpopminCommand(client *c);
 void zpopmaxCommand(client *c);
+void zrandmemberCommand(client *c);
 void bzpopminCommand(client *c);
 void bzpopmaxCommand(client *c);
 void multiCommand(client *c);

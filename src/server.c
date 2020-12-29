@@ -452,6 +452,10 @@ struct redisCommand redisCommandTable[] = {
      "read-only @sortedset",
      0,zunionInterDiffGetKeys,0,0,0,0,0,0},
 
+    {"zrandmember",zrandmemberCommand,-2,
+     "read-only random @sortedset",
+     0,NULL,1,1,1,0,0,0},
+
     {"zinter",zinterCommand,-3,
      "read-only @sortedset",
      0,zunionInterDiffGetKeys,0,0,0,0,0,0},
