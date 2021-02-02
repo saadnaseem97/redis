@@ -62,6 +62,7 @@
 #include "anet.h"
 #include "ae.h"
 #include "cli_common.h"
+#include "mt19937-64.h"
 
 #define UNUSED(V) ((void) V)
 
@@ -5300,7 +5301,7 @@ static clusterManagerNode *clusterNodeForResharding(char *id,
         clusterManagerLogErr(invalid_node_msg, id);
         *raise_err = 1;
         return NULL;
-    } else if (node != NULL && target != NULL) {
+    } else if (target != NULL) {
         if (!strcmp(node->name, target->name)) {
             clusterManagerLogErr( "*** It is not possible to use "
                                   "the target node as "
@@ -5578,7 +5579,7 @@ static int clusterManagerCommandCreate(int argc, char **argv) {
         if (last > CLUSTER_MANAGER_SLOTS || i == (masters_count - 1))
             last = CLUSTER_MANAGER_SLOTS - 1;
         if (last < first) last = first;
-        printf("Master[%d] -> Slots %lu - %lu\n", i, first, last);
+        printf("Master[%d] -> Slots %ld - %ld\n", i, first, last);
         master->slots_count = 0;
         for (j = first; j <= last; j++) {
             master->slots[j] = 1;
@@ -6939,6 +6940,10 @@ void sendCapa() {
     sendReplconf("capa", "eof");
 }
 
+void sendRdbOnly(void) {
+    sendReplconf("rdb-only", "1");
+}
+
 /* Read raw bytes through a redisContext. The read operation is not greedy
  * and may not fill the buffer entirely.
  */
@@ -7131,10 +7136,11 @@ static void getRDB(clusterManagerNode *node) {
     } else {
         fprintf(stderr,"Transfer finished with success.\n");
     }
-    redisFree(s); /* Close the file descriptor ASAP as fsync() may take time. */
+    redisFree(s); /* Close the connection ASAP as fsync() may take time. */
+    if (node)
+        node->context = NULL;
     fsync(fd);
     close(fd);
-    fprintf(stderr,"Transfer finished with success.\n");
     if (node) {
         sdsfree(filename);
         return;
@@ -8123,6 +8129,7 @@ static sds askPassword(const char *msg) {
 
 int main(int argc, char **argv) {
     int firstarg;
+    struct timeval tv;
 
     config.hostip = sdsnew("127.0.0.1");
     config.hostport = 6379;
@@ -8219,6 +8226,9 @@ int main(int argc, char **argv) {
     }
 #endif
 
+    gettimeofday(&tv, NULL);
+    init_genrand64(((long long) tv.tv_sec * 1000000 + tv.tv_usec) ^ getpid());
+
     /* Cluster Manager mode */
     if (CLUSTER_MANAGER_MODE()) {
         clusterManagerCommandProc *proc = validateClusterManagerCommand();
@@ -8251,6 +8261,7 @@ int main(int argc, char **argv) {
     if (config.getrdb_mode) {
         if (cliConnect(0) == REDIS_ERR) exit(1);
         sendCapa();
+        sendRdbOnly();
         getRDB(NULL);
     }
 

@@ -497,5 +497,26 @@ test {corrupt payload: fuzzer findings - valgrind negative malloc} {
     }
 }
 
+test {corrupt payload: fuzzer findings - valgrind invalid read} {
+    start_server [list overrides [list loglevel verbose use-exit-on-panic yes crash-memcheck-enabled no] ] {
+        r config set sanitize-dump-payload yes
+        r debug set-skip-checksum-validation 1
+        catch {r RESTORE _key 0 "\x05\x0A\x02\x5F\x39\x00\x00\x00\x00\x00\x00\x22\x40\xC0\x08\x00\x00\x00\x00\x00\x00\x20\x40\x02\x5F\x37\x00\x00\x00\x00\x00\x00\x1C\x40\xC0\x06\x00\x00\x00\x00\x00\x00\x18\x40\x02\x5F\x33\x00\x00\x00\x00\x00\x00\x14\x40\xC0\x04\x00\x00\x00\x00\x00\x00\x10\x40\x02\x5F\x33\x00\x00\x00\x00\x00\x00\x08\x40\xC0\x02\x00\x00\x00\x00\x00\x00\x00\x40\x02\x5F\x31\x00\x00\x00\x00\x00\x00\xF0\x3F\xC0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x3C\x66\xD7\x14\xA9\xDA\x3C\x69"} err
+        assert_match "*Bad data format*" $err
+        r ping
+    }
+}
+
+test {corrupt payload: fuzzer findings - HRANDFIELD on bad ziplist} {
+    start_server [list overrides [list loglevel verbose use-exit-on-panic yes crash-memcheck-enabled no] ] {
+        r config set sanitize-dump-payload yes
+        r debug set-skip-checksum-validation 1
+        r RESTORE _int 0 "\x04\xC0\x01\x09\x00\xF6\x8A\xB6\x7A\x85\x87\x72\x4D"
+        catch {r HRANDFIELD _int}
+        assert_equal [count_log_message 0 "crashed by signal"] 0
+        assert_equal [count_log_message 0 "ASSERTION FAILED"] 1
+    }
+}
+
 } ;# tags
 

@@ -58,7 +58,6 @@ void* activeDefragAlloc(void *ptr) {
     void *newptr;
     if(!je_get_defrag_hint(ptr)) {
         server.stat_active_defrag_misses++;
-        size = zmalloc_size(ptr);
         return NULL;
     }
     /* move this allocation to a new allocation.
@@ -368,7 +367,7 @@ long activeDefragSdsListAndDict(list *l, dict *d, int dict_val_type) {
         } else if (dict_val_type == DEFRAG_SDS_DICT_VAL_VOID_PTR) {
             void *newptr, *ptr = dictGetVal(de);
             if ((newptr = activeDefragAlloc(ptr)))
-                ln->value = newptr, defragged++;
+                de->v.val = newptr, defragged++;
         }
         defragged += dictIterDefragEntry(di);
     }

@@ -50,11 +50,17 @@ proc kill_server config {
                 tags {"leaks"} {
                     test "Check for memory leaks (pid $pid)" {
                         set output {0 leaks}
-                        catch {exec leaks $pid} output
-                        if {[string match {*process does not exist*} $output] ||
-                            [string match {*cannot examine*} $output]} {
-                            # In a few tests we kill the server process.
-                            set output "0 leaks"
+                        catch {exec leaks $pid} output option
+                        # In a few tests we kill the server process, so leaks will not find it.
+                        # It'll exits with exit code >1 on error, so we ignore these.
+                        if {[dict exists $option -errorcode]} {
+                            set details [dict get $option -errorcode]
+                            if {[lindex $details 0] eq "CHILDSTATUS"} {
+                                  set status [lindex $details 2]
+                                  if {$status > 1} {
+                                      set output "0 leaks"
+                                  }
+                            }
                         }
                         set output
                     } {*0 leaks*}
@@ -146,20 +152,48 @@ proc server_is_up {host port retrynum} {
     return 0
 }
 
+# Check if current ::tags match requested tags. If ::allowtags are used,
+# there must be some intersection. If ::denytags are used, no intersection
+# is allowed. Returns 1 if tags are acceptable or 0 otherwise, in which
+# case err_return names a return variable for the message to be logged.
+proc tags_acceptable {err_return} {
+    upvar $err_return err
+
+    # If tags are whitelisted, make sure there's match
+    if {[llength $::allowtags] > 0} {
+        set matched 0
+        foreach tag $::allowtags {
+            if {[lsearch $::tags $tag] >= 0} {
+                incr matched
+            }
+        }
+        if {$matched < 1} {
+            set err "Tag: none of the tags allowed"
+            return 0
+        }
+    }
+
+    foreach tag $::denytags {
+        if {[lsearch $::tags $tag] >= 0} {
+            set err "Tag: $tag denied"
+            return 0
+        }
+    }
+
+    return 1
+}
+
 # doesn't really belong here, but highly coupled to code in start_server
 proc tags {tags code} {
     # If we 'tags' contain multiple tags, quoted and seperated by spaces,
     # we want to get rid of the quotes in order to have a proper list
     set tags [string map { \" "" } $tags]
     set ::tags [concat $::tags $tags]
-    # We skip unwanted tags
-    foreach tag $::denytags {
-        if {[lsearch $::tags $tag] >= 0} {
-            incr ::num_aborted
-            send_data_packet $::test_server_fd ignore "Tag: $tag"
-            set ::tags [lrange $::tags 0 end-[llength $tags]]
-            return
-        }
+    if {![tags_acceptable err]} {
+        incr ::num_aborted
+        send_data_packet $::test_server_fd ignore $err
+        set ::tags [lrange $::tags 0 end-[llength $tags]]
+        return
     }
     uplevel 1 $code
     set ::tags [lrange $::tags 0 end-[llength $tags]]
@@ -261,13 +295,11 @@ proc start_server {options {code undefined}} {
     }
 
     # We skip unwanted tags
-    foreach tag $::denytags {
-        if {[lsearch $::tags $tag] >= 0} {
-            incr ::num_aborted
-            send_data_packet $::test_server_fd ignore "Tag: $tag"
-            set ::tags [lrange $::tags 0 end-[llength $tags]]
-            return
-        }
+    if {![tags_acceptable err]} {
+        incr ::num_aborted
+        send_data_packet $::test_server_fd ignore $err
+        set ::tags [lrange $::tags 0 end-[llength $tags]]
+        return
     }
 
     # If we are running against an external server, we just push the
