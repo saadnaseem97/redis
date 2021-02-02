@@ -1503,6 +1503,36 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
     }
 }
 
+
+int raxIteratorPrevPathStep(raxIterator *it) {
+    if (it->flags & RAX_ITER_EOF) {
+        return 1;
+    } else if (it->flags & RAX_ITER_JUST_SEEKED) {
+        it->flags &= ~RAX_ITER_JUST_SEEKED;
+        return 1;
+    }
+
+    while(it->node != it->rt->head) {
+
+        it->node = raxStackPop(&it->stack);
+
+        int todel = it->node->iscompr ? it->node->size : 1;
+        raxIteratorDelChars(it,todel);
+
+        if (it->node->iskey) {
+            it->data = raxGetData(it->node);
+            return 1;
+        }
+    }
+
+    it->flags |= RAX_ITER_EOF;
+
+    return 1;
+
+
+
+}
+
 /* Seek an iterator at the specified element.
  * Return 0 if the seek failed for syntax error or out of memory. Otherwise
  * 1 is returned. When 0 is returned for out of memory, errno is set to
@@ -1722,7 +1752,7 @@ int raxPrev(raxIterator *it) {
 
 
 int raxPrevStep(raxIterator *it) {
-    if (!raxIteratorPrevStep(it,0)) {
+    if (!raxIteratorPrevPathStep(it)) {
         errno = ENOMEM;
         return 0;
     }
