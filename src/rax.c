@@ -1517,6 +1517,7 @@ int raxIteratorPrevPathStep(raxIterator *it) {
         it->node = raxStackPop(&it->stack);
 
         int todel = it->node->iscompr ? it->node->size : 1;
+        //printf("%d\n",todel);
         raxIteratorDelChars(it,todel);
 
         if (it->node->iskey) {
@@ -1751,7 +1752,7 @@ int raxPrev(raxIterator *it) {
 }
 
 
-int raxPrevStep(raxIterator *it) {
+int raxPrevPath(raxIterator *it) {
     if (!raxIteratorPrevPathStep(it)) {
         errno = ENOMEM;
         return 0;

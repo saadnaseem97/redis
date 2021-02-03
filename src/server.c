@@ -5854,6 +5854,36 @@ int iAmMaster(void) {
 }
 
 int main(int argc, char **argv) {
+    /*
+    rax *testRax = raxNew();
+
+    raxInsert(testRax,(unsigned char*)"b",1,(void*)(long)1,NULL);
+    raxInsert(testRax,(unsigned char*)"ba",2,(void*)(long)2,NULL);
+    raxInsert(testRax,(unsigned char*)"banana",6,(void*)(long)3,NULL);
+
+    raxInsert(testRax,(unsigned char*)"f",1,(void*)(long)4,NULL);
+    raxInsert(testRax,(unsigned char*)"foobar",6,(void*)(long)5,NULL);
+    raxInsert(testRax,(unsigned char*)"foobar123",9,(void*)(long)6,NULL);
+
+    raxShow(testRax);
+    raxIterator ri;
+    raxStart(&ri,testRax);
+    raxSeek(&ri,">",(unsigned char*)"foobar",6);
+    while(raxPrevPath(&ri)) {
+        printf("%s\n","ssssssssssssssssssssssss");
+        printf("%ld\n",(long)ri.data);
+        printf("%.*s\n",ri.key_len,ri.key);
+    }
+
+    raxStop(&ri);
+    raxFree(testRax);
+
+
+    */
+
+
+
+
     struct timeval tv;
     int j;
     char config_from_stdin = 0;
