@@ -5854,7 +5854,7 @@ int iAmMaster(void) {
 }
 
 int main(int argc, char **argv) {
-    /*
+    
     rax *testRax = raxNew();
 
     raxInsert(testRax,(unsigned char*)"b",1,(void*)(long)1,NULL);
@@ -5868,18 +5868,18 @@ int main(int argc, char **argv) {
     raxShow(testRax);
     raxIterator ri;
     raxStart(&ri,testRax);
-    raxSeek(&ri,">",(unsigned char*)"foobar",6);
+    raxSeek(&ri,"=",(unsigned char*)"foobar",6);
     while(raxPrevPath(&ri)) {
         printf("%s\n","ssssssssssssssssssssssss");
         printf("%ld\n",(long)ri.data);
-        printf("%.*s\n",ri.key_len,ri.key);
+        printf("%.*s\n",(int)ri.key_len,ri.key);
     }
 
     raxStop(&ri);
     raxFree(testRax);
 
 
-    */
+    
 
 
 
