@@ -1539,7 +1539,7 @@ int raxIteratorPrevPathStep(raxIterator *it) {
  * 1 is returned. When 0 is returned for out of memory, errno is set to
  * the ENOMEM value. */
 int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
-    int eq = 0, lt = 0, gt = 0, first = 0, last = 0;
+    int eq = 0, lt = 0, gt = 0, first = 0, last = 0, prefix = 0;
 
     it->stack.items = 0; /* Just resetting. Initialized by raxStart(). */
     it->flags |= RAX_ITER_JUST_SEEKED;
@@ -1560,6 +1560,8 @@ int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
         first = 1;
     } else if (op[0] == '$') {
         last = 1;
+    } else if (op[0] == '#') {
+        prefix = 1;
     } else {
         errno = 0;
         return 0; /* Error. */
