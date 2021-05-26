@@ -320,6 +320,17 @@ start_server {tags {"scripting"}} {
         r eval {return 'hello' --trailing comment} 0
     } {hello}
 
+    test {EVAL_RO - Successful case} {
+        r set foo bar
+        assert_equal bar [r eval_ro {return redis.call('get', KEYS[1]);} 1 foo]
+    }
+
+    test {EVAL_RO - Cannot run write commands} {
+        r set foo bar
+        catch {r eval_ro {redis.call('del', KEYS[1]);} 1 foo} e
+        set e
+    } {*Write commands are not allowed from read-only scripts*}
+
     test {SCRIPTING FLUSH - is able to clear the scripts cache?} {
         r set mykey myval
         set v [r evalsha fd758d1589d044dd850a6f05d52f2eefd27f033f 1 mykey]
@@ -468,6 +479,7 @@ start_server {tags {"scripting"}} {
         r slaveof no one
         set res
     } {102}
+    r config set aof-use-rdb-preamble yes
 
     test {EVAL timeout from AOF} {
         # generate a long running script that is propagated to the AOF as script
@@ -505,8 +517,6 @@ start_server {tags {"scripting"}} {
         $rd close
         r get x
     } {y}
-    r config set aof-use-rdb-preamble yes
-    r config set lua-replicate-commands yes
 
     test {We can call scripts rewriting client->argv from Lua} {
         r del myset
@@ -611,6 +621,71 @@ start_server {tags {"scripting"}} {
         r script kill
         after 200 ; # Give some time to Lua to call the hook again...
         assert_equal [r ping] "PONG"
+    }
+
+    test {Timedout read-only scripts can be killed by SCRIPT KILL even when use pcall} {
+        set rd [redis_deferring_client]
+        r config set lua-time-limit 10
+        $rd eval {local f = function() while 1 do redis.call('ping') end end while 1 do pcall(f) end} 0
+        
+        wait_for_condition 50 100 {
+            [catch {r ping} e] == 1
+        } else {
+            fail "Can't wait for script to start running"
+        }
+        catch {r ping} e
+        assert_match {BUSY*} $e
+
+        r script kill
+
+        wait_for_condition 50 100 {
+            [catch {r ping} e] == 0
+        } else {
+            fail "Can't wait for script to be killed"
+        }
+        assert_equal [r ping] "PONG"
+
+        catch {$rd read} res
+        $rd close
+
+        assert_match {*killed by user*} $res        
+    }
+
+    test {Timedout script does not cause a false dead client} {
+        set rd [redis_deferring_client]
+        r config set lua-time-limit 10
+
+        # senging (in a pipeline):
+        # 1. eval "while 1 do redis.call('ping') end" 0
+        # 2. ping
+        set buf "*3\r\n\$4\r\neval\r\n\$33\r\nwhile 1 do redis.call('ping') end\r\n\$1\r\n0\r\n"
+        append buf "*1\r\n\$4\r\nping\r\n"
+        $rd write $buf
+        $rd flush
+
+        wait_for_condition 50 100 {
+            [catch {r ping} e] == 1
+        } else {
+            fail "Can't wait for script to start running"
+        }
+        catch {r ping} e
+        assert_match {BUSY*} $e
+
+        r script kill
+        wait_for_condition 50 100 {
+            [catch {r ping} e] == 0
+        } else {
+            fail "Can't wait for script to be killed"
+        }
+        assert_equal [r ping] "PONG"
+
+        catch {$rd read} res
+        assert_match {*killed by user*} $res
+
+        set res [$rd read]
+        assert_match {*PONG*} $res        
+
+        $rd close
     }
 
     test {Timedout script link is still usable after Lua returns} {

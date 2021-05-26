@@ -72,6 +72,8 @@ proc kill_server config {
     # kill server and wait for the process to be totally exited
     send_data_packet $::test_server_fd server-killing $pid
     catch {exec kill $pid}
+    # Node might have been stopped in the test
+    catch {exec kill -SIGCONT $pid}
     if {$::valgrind} {
         set max_wait 60000
     } else {
@@ -251,12 +253,19 @@ proc wait_server_started {config_file stdout pid} {
 
         # Check if the port is actually busy and the server failed
         # for this reason.
-        if {[regexp {Could not create server TCP} [exec cat $stdout]]} {
+        if {[regexp {Failed listening on port} [exec cat $stdout]]} {
             set port_busy 1
             break
         }
     }
     return $port_busy
+}
+
+proc dump_server_log {srv} {
+    set pid [dict get $srv "pid"]
+    puts "\n===== Start of server log (pid $pid) =====\n"
+    puts [exec cat [dict get $srv "stdout"]]
+    puts "===== End of server log (pid $pid) =====\n"
 }
 
 proc start_server {options {code undefined}} {
@@ -492,10 +501,14 @@ proc start_server {options {code undefined}} {
         # connect client (after server dict is put on the stack)
         reconnect
 
+        # remember previous num_failed to catch new errors
+        set prev_num_failed $::num_failed
+
         # execute provided block
         set num_tests $::num_tests
         if {[catch { uplevel 1 $code } error]} {
             set backtrace $::errorInfo
+            set assertion [string match "assertion:*" $error]
 
             # fetch srv back from the server list, in case it was restarted by restart_server (new PID)
             set srv [lindex $::servers end]
@@ -507,17 +520,23 @@ proc start_server {options {code undefined}} {
             dict set srv "skipleaks" 1
             kill_server $srv
 
-            # Print warnings from log
-            puts [format "\nLogged warnings (pid %d):" [dict get $srv "pid"]]
-            set warnings [warnings_from_file [dict get $srv "stdout"]]
-            if {[string length $warnings] > 0} {
-                puts "$warnings"
+            if {$::dump_logs && $assertion} {
+                # if we caught an assertion ($::num_failed isn't incremented yet)
+                # this happens when the test spawns a server and not the other way around
+                dump_server_log $srv
             } else {
-                puts "(none)"
+                # Print crash report from log
+                set crashlog [crashlog_from_file [dict get $srv "stdout"]]
+                if {[string length $crashlog] > 0} {
+                    puts [format "\nLogged crash report (pid %d):" [dict get $srv "pid"]]
+                    puts "$crashlog"
+                    puts ""
+                }
             }
-            puts ""
 
-            if {$::durable} {
+            if {!$assertion && $::durable} {
+                # durable is meant to prevent the whole tcl test from exiting on
+                # an exception. an assertion will be caught by the test proc.
                 set msg [string range $error 10 end]
                 lappend details $msg
                 lappend details $backtrace
@@ -528,6 +547,10 @@ proc start_server {options {code undefined}} {
             } else {
                 # Re-raise, let handler up the stack take care of this.
                 error $error $backtrace
+            }
+        } else {
+            if {$::dump_logs && $prev_num_failed != $::num_failed} {
+                dump_server_log $srv
             }
         }
 

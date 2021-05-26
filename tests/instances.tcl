@@ -29,6 +29,7 @@ set ::sentinel_base_port 20000
 set ::redis_base_port 30000
 set ::redis_port_count 1024
 set ::host "127.0.0.1"
+set ::leaked_fds_file [file normalize "tmp/leaked_fds.txt"]
 set ::pids {} ; # We kill everything at exit
 set ::dirs {} ; # We remove all the temp dirs at exit
 set ::run_matching {} ; # If non empty, only tests matching pattern are run.
@@ -63,6 +64,8 @@ proc exec_instance {type dirname cfgfile} {
 proc spawn_instance {type base_port count {conf {}} {base_conf_file ""}} {
     for {set j 0} {$j < $count} {incr j} {
         set port [find_available_port $base_port $::redis_port_count]
+        # plaintext port (only used for TLS cluster)
+        set pport 0
         # Create a directory for this instance.
         set dirname "${type}_${j}"
         lappend ::dirs $dirname
@@ -82,7 +85,9 @@ proc spawn_instance {type base_port count {conf {}} {base_conf_file ""}} {
             puts $cfg "tls-port $port"
             puts $cfg "tls-replication yes"
             puts $cfg "tls-cluster yes"
-            puts $cfg "port 0"
+            # plaintext port, only used by plaintext clients in a TLS cluster
+            set pport [find_available_port $base_port $::redis_port_count]
+            puts $cfg "port $pport"
             puts $cfg [format "tls-cert-file %s/../../tls/server.crt" [pwd]]
             puts $cfg [format "tls-key-file %s/../../tls/server.key" [pwd]]
             puts $cfg [format "tls-client-cert-file %s/../../tls/client.crt" [pwd]]
@@ -117,6 +122,8 @@ proc spawn_instance {type base_port count {conf {}} {base_conf_file ""}} {
                 set cfg [open $cfgfile a+]
                 if {$::tls} {
                     puts $cfg "tls-port $port"
+                    set pport [find_available_port $base_port $::redis_port_count]
+                    puts $cfg "port $pport"
                 } else {
                     puts $cfg "port $port"
                 }
@@ -142,6 +149,7 @@ proc spawn_instance {type base_port count {conf {}} {base_conf_file ""}} {
             pid $pid \
             host $::host \
             port $port \
+            plaintext-port $pport \
             link $link \
         ]
     }
@@ -185,6 +193,8 @@ proc is_alive pid {
 
 proc stop_instance pid {
     catch {exec kill $pid}
+    # Node might have been stopped in the test
+    catch {exec kill -SIGCONT $pid}
     if {$::valgrind} {
         set max_wait 60000
     } else {
@@ -410,13 +420,13 @@ proc check_leaks instance_types {
 
 # Execute all the units inside the 'tests' directory.
 proc run_tests {} {
-    set sentinel_fd_leaks_file "sentinel_fd_leaks"
-    if { [file exists $sentinel_fd_leaks_file] } {
-        file delete $sentinel_fd_leaks_file
-    }
-
     set tests [lsort [glob ../tests/*]]
     foreach test $tests {
+        # Remove leaked_fds file before starting
+        if {$::leaked_fds_file != "" && [file exists $::leaked_fds_file]} {
+            file delete $::leaked_fds_file
+        }
+
         if {$::run_matching ne {} && [string match $::run_matching $test] == 0} {
             continue
         }
@@ -424,19 +434,19 @@ proc run_tests {} {
         puts [colorstr yellow "Testing unit: [lindex [file split $test] end]"]
         source $test
         check_leaks {redis sentinel}
+
+        # Check if a leaked fds file was created and abort the test.
+        if {$::leaked_fds_file != "" && [file exists $::leaked_fds_file]} {
+            puts [colorstr red "ERROR: Sentinel has leaked fds to scripts:"]
+            puts [exec cat $::leaked_fds_file]
+            puts "----"
+            incr ::failed
+        }
     }
 }
 
 # Print a message and exists with 0 / 1 according to zero or more failures.
 proc end_tests {} {
-    set sentinel_fd_leaks_file "sentinel_fd_leaks"
-    if { [file exists $sentinel_fd_leaks_file] } {
-        # temporarily disabling this error from failing the tests until leaks are fixed.
-        #puts [colorstr red "WARNING: sentinel test(s) failed, there are leaked fds in sentinel:"] 
-        #puts [exec cat $sentinel_fd_leaks_file]
-        #exit 1
-    }
-
     if {$::failed == 0 } {
         puts "GOOD! No errors."
         exit 0
@@ -487,6 +497,14 @@ proc SI {n field} {
 
 proc RI {n field} {
     get_info_field [R $n info] $field
+}
+
+proc RPort {n} {
+    if {$::tls} {
+        return [lindex [R $n config get tls-port] 1]
+    } else {
+        return [lindex [R $n config get port] 1]
+    }
 }
 
 # Iterate over IDs of sentinel or redis instances.

@@ -1,4 +1,4 @@
-start_server {tags {"other"}} {
+start_server {overrides {save ""} tags {"other"}} {
     if {$::force_failure} {
         # This is used just for test suite development purposes.
         test {Failing test} {
@@ -55,7 +55,7 @@ start_server {tags {"other"}} {
     } {*index is out of range*}
 
     tags {consistency} {
-        if {![catch {package require sha1}]} {
+        if {true} {
             if {$::accurate} {set numops 10000} else {set numops 1000}
             test {Check consistency of different data types after a reload} {
                 r flushdb
@@ -266,9 +266,6 @@ start_server {tags {"other"}} {
         assert_equal [$rd read] "OK"
 
         $rd reset
-
-        # skip reset ouptut
-        $rd read
         assert_equal [$rd read] "RESET"
 
         assert_no_match {*flags=O*} [r client list]
@@ -309,6 +306,12 @@ start_server {tags {"other"}} {
 
         populate 4096 "" 1
         r bgsave
+        wait_for_condition 10 100 {
+            [s rdb_bgsave_in_progress] eq 1
+        } else {
+            fail "bgsave did not start in time"
+        }
+
         r mset k1 v1 k2 v2
         # Hash table should not rehash
         assert_no_match "*table size: 8192*" [r debug HTSTATS 9]
